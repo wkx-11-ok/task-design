@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>动态待办 · 习惯打卡</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --card: #fff; --text: #1e1b2e; --muted: #8b87a3;
+    --accent: #7c5cff; --ok: #22c55e; --warn: #f59e0b; --danger: #ef4444;
+    --line: #ece9f7; --radius: 14px;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: radial-gradient(900px 460px at 8% -10%, #e8e0ff 0%, transparent 60%),
+                radial-gradient(760px 420px at 100% 0%, #ffe6d9 0%, transparent 55%),
+                #f7f6fb;
+    color: var(--text);
+    padding: 14px 12px 40px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { max-width: 560px; margin: 0 auto; }
+
+  /* ---------- 头部 ---------- */
+  .header { margin-bottom: 12px; }
+  .header-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+  h1 { font-size: 22px; letter-spacing: -.4px; }
+  .date-line { color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .stats { font-size: 22px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .stats .sep { color: #cfc9e4; font-weight: 500; margin: 0 1px; }
+  .stats .total { color: var(--muted); font-weight: 600; font-size: 15px; }
+  .progress { height: 8px; background: #e9e6f5; border-radius: 999px; margin-top: 10px; overflow: hidden; }
+  .progress-fill {
+    height: 100%; width: 0; border-radius: 999px;
+    background: linear-gradient(90deg, #7c5cff, #a86bff 45%, #ff8a5b);
+    transition: width .5s cubic-bezier(.2,.8,.3,1);
+  }
+  .progress-text { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* ---------- 视图切换 ---------- */
+  .view-tabs {
+    display: flex; background: #eeebf8; border-radius: 12px; padding: 4px;
+    margin-bottom: 12px; gap: 4px;
+  }
+  .tab {
+    flex: 1; padding: 9px 0; border-radius: 9px; font-size: 14px; font-weight: 600;
+    color: var(--muted); transition: all .2s;
+  }
+  .tab.active { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(124,92,255,.16); }
+
+  .view { animation: fadeIn .28s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- 面板 ---------- */
+  .panel {
+    background: var(--card); border-radius: var(--radius);
+    border: 1px solid var(--line); margin-bottom: 12px;
+    box-shadow: 0 4px 18px rgba(80,60,160,.06);
+    overflow: hidden;
+  }
+  .panel-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 11px 13px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #fbfaff, #f7f5ff);
+  }
+  .panel-title { font-size: 14px; font-weight: 700; }
+  .badge {
+    font-size: 11px; padding: 3px 9px; border-radius: 999px;
+    background: #efecfb; color: var(--muted); font-weight: 600;
+    white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis;
+  }
+  .badge.active { background: linear-gradient(135deg, #ff8a5b, #ff6b9d); color: #fff;
+    animation: pulse 1.6s ease-in-out infinite; }
+  .badge.rewarded { background: linear-gradient(135deg, #fde68a, #fcd34d); color: #92400e; }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(255,107,157,.45); }
+    50% { box-shadow: 0 0 0 6px rgba(255,107,157,0); }
+  }
+  .panel-actions { margin-left: auto; display: flex; gap: 6px; }
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: 9px;
+    background: #efecfb; color: var(--accent); font-size: 17px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .2s;
+  }
+  .icon-btn:hover { background: #e4dfff; }
+  .icon-btn:active { transform: scale(.92); }
+
+  /* 固定高度 + 内部滚动 */
+  .panel-body {
+    max-height: 250px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 10px;
+  }
+  .panel-body::-webkit-scrollbar { width: 5px; }
+  .panel-body::-webkit-scrollbar-thumb { background: #d9d3f0; border-radius: 999px; }
+
+  .empty {
+    text-align: center; color: #b0aac8; font-size: 13px; padding: 26px 12px;
+  }
+
+  /* ---------- 任务卡片 ---------- */
+  .task {
+    position: relative; display: flex; gap: 10px; align-items: flex-start;
+    padding: 11px 11px 11px 12px; border-radius: 12px;
+    background: #fbfaff; border: 1px solid var(--line);
+    margin-bottom: 8px; transition: all .2s;
+    animation: slideIn .3s ease backwards;
+  }
+  .task:last-child { margin-bottom: 0; }
+  .task:hover { border-color: #d8d0f5; }
+  .task.urgent { background: linear-gradient(90deg, #fff3ec 0%, #fbfaff 18%); }
+  .task.urgent::before {
+    content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+    border-radius: 3px; background: linear-gradient(180deg, #ff6b6b, #ff9f43);
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .check {
+    flex: 0 0 22px; width: 22px; height: 22px; border-radius: 7px;
+    border: 2px solid #d9d3f0; background: #fff; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; margin-top: 1px;
+    transition: all .2s cubic-bezier(.2,.9,.3,1.4);
+  }
+  .check:active { transform: scale(.9); }
+  .task.done .check {
+    background: linear-gradient(135deg, #22c55e, #4ade80); border-color: transparent;
+  }
+
+  .task-body { flex: 1; min-width: 0; }
+  .task-title { font-size: 14px; font-weight: 600; line-height: 1.42; word-break: break-word; }
+  .task.done .task-title { text-decoration: line-through; color: #b0aac8; }
+  .task-note { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.4; word-break: break-word; }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .tags:empty { display: none; }
+  .tag { font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .tag-deadline { background: #f0edff; color: #6b52d6; }
+  .tag-deadline.today { background: #ffe6df; color: #e05a2b; }
+  .tag-deadline.overdue { background: #ffe4e4; color: #d63333; }
+  .tag-deadline.soon { background: #fff4d9; color: #b6791f; }
+  .tag-carry { background: #e6f2ff; color: #2b7fd4; }
+
+  .del {
+    flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px;
+    color: #c9c3de; font-size: 17px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .2s;
+  }
+  .del:hover { background: #ffe4e4; color: var(--danger); }
+
+  /* ---------- 习惯卡片 ---------- */
+  .habit {
+    padding: 11px 12px; border-radius: 12px;
+    background: #fbfaff; border: 1px solid var(--line);
+    margin-bottom: 8px; transition: all .2s;
+    animation: slideIn .3s ease backwards;
+  }
+  .habit:last-child { margin-bottom: 0; }
+  .habit:hover { border-color: #d8d0f5; }
+  .habit.done { background: #f2fbf5; border-color: #d5f0dd; }
+  .habit-head { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .habit-name { font-size: 14px; font-weight: 600; flex: 1; word-break: break-word; }
+  .habit.done .habit-name { color: #8b87a3; }
+  .habit-freq {
+    font-size: 10.5px; padding: 2px 8px; border-radius: 999px;
+    background: #efecfb; color: #6b52d6; font-weight: 600;
+  }
+  .habit-stats { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+  .habit-stats .streak { color: #f97316; font-weight: 700; }
+  .habit-week {
+    display: flex; gap: 4px; margin-top: 8px;
+  }
+  .habit-week-cell {
+    flex: 1; text-align: center; font-size: 9px; color: var(--muted);
+  }
+  .habit-week-cell .dot {
+    display: block; width: 100%; aspect-ratio: 1; max-width: 22px;
+    margin: 0 auto 3px; border-radius: 7px;
+    background: #e9e6f5; border: 1.5px solid transparent;
+    transition: all .2s;
+  }
+  .habit-week-cell.done .dot { background: linear-gradient(135deg, #22c55e, #4ade80); }
+  .habit-week-cell.today .dot { border-color: var(--accent); }
+  .habit-week-cell.off .dot { background: #f4f2fb; opacity: .45; }
+
+  .habit-actions { margin-top: 9px; display: flex; gap: 8px; align-items: center; }
+  .check-btn {
+    padding: 6px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+    background: linear-gradient(135deg, #7c5cff, #9b6bff); color: #fff;
+    box-shadow: 0 3px 10px rgba(124,92,255,.28);
+    transition: all .2s;
+  }
+  .check-btn:active { transform: scale(.95); }
+  .check-btn.done {
+    background: #eef7f0; color: #22c55e; box-shadow: none;
+  }
+  .check-btn.off {
+    background: #f0eef8; color: #b0aac8; box-shadow: none; cursor: default;
+  }
+
+  /* ---------- 日历 ---------- */
+  .calendar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 4px; font-size: 15px; font-weight: 700;
+  }
+  .calendar-weekdays {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    text-align: center; font-size: 11px; color: var(--muted); padding: 6px 0;
+  }
+  .calendar-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+  }
+  .cal-cell {
+    aspect-ratio: 1; border-radius: 10px; padding: 3px 2px;
+    display: flex; flex-direction: column; align-items: center;
+    background: #fbfaff; border: 1.5px solid transparent;
+    transition: all .2s; cursor: pointer; position: relative;
+  }
+  .cal-cell.empty { background: transparent; cursor: default; }
+  .cal-cell.today { border-color: var(--accent); }
+  .cal-cell:not(.empty):hover { background: #f2eeff; }
+  .cal-cell .num { font-size: 11px; font-weight: 600; color: #4a4460; }
+  .cal-cell.today .num { color: var(--accent); }
+  .cal-marks { display: flex; gap: 2px; margin-top: 3px; }
+  .cal-mark { width: 6px; height: 6px; border-radius: 50%; }
+  .cal-mark.dot-full { background: #22c55e; }
+  .cal-mark.dot-partial { background: #f59e0b; }
+  .cal-mark.dot-empty { background: #cbd5e1; }
+  .cal-mark.diamond-full { background: #22c55e; transform: rotate(45deg); border-radius: 1px; }
+  .cal-mark.diamond-partial { background: #f59e0b; transform: rotate(45deg); border-radius: 1px; }
+  .cal-mark.diamond-none { background: #cbd5e1; transform: rotate(45deg); border-radius: 1px; }
+  .cal-legend {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px;
+    font-size: 11px; color: var(--muted);
+  }
+  .cal-legend > div { display: flex; align-items: center; gap: 4px; }
+  .cal-legend .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .cal-legend .diamond { width: 8px; height: 8px; transform: rotate(45deg); border-radius: 1px; }
+
+  /* ---------- 弹层 ---------- */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 900;
+    background: rgba(30,27,46,.5);
+    display: flex; align-items: flex-end; justify-content: center;
+    animation: fadeIn .2s ease;
+    padding: 0;
+  }
+  @media (min-width: 560px) {
+    .modal-backdrop { align-items: center; }
+  }
+  .modal {
+    background: #fff; width: 100%; max-width: 520px;
+    border-radius: 20px 20px 0 0;
+    max-height: 88vh; overflow-y: auto;
+    animation: slideUp .28s cubic-bezier(.2,.9,.3,1);
+    padding: 20px 18px 26px;
+  }
+  @media (min-width: 560px) {
+    .modal { border-radius: 20px; }
+  }
+  @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .modal h3 { font-size: 17px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .modal .close-x {
+    margin-left: auto; width: 28px; height: 28px; border-radius: 9px;
+    background: #f0eef8; color: #8b87a3; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 5px; font-weight: 600; }
+  .modal input[type="text"], .modal input[type="date"], .modal select {
+    width: 100%; font: inherit; font-size: 14px;
+    border: 1.5px solid var(--line); background: #fbfaff;
+    border-radius: 11px; padding: 11px 12px; outline: none;
+    transition: all .2s;
+  }
+  .modal input:focus, .modal select:focus {
+    border-color: var(--accent); background: #fff;
+    box-shadow: 0 0 0 3px rgba(124,92,255,.12);
+  }
+  .modal-btns { display: flex; gap: 10px; margin-top: 18px; }
+  .btn-primary {
+    flex: 1; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 700;
+    background: linear-gradient(135deg, #7c5cff, #9b6bff); color: #fff;
+    box-shadow: 0 5px 16px rgba(124,92,255,.3);
+    transition: all .2s;
+  }
+  .btn-primary:active { transform: scale(.97); }
+  .btn-secondary {
+    flex: 1; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 700;
+    background: #f0eef8; color: #6b6288;
+  }
+
+  /* 抽奖弹层 */
+  .draw-box { text-align: center; padding: 10px 0; }
+  .draw-title { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
+  .draw-sub { font-size: 12.5px; color: var(--muted); margin-bottom: 20px; }
+  .draw-prize {
+    font-size: 22px; font-weight: 800; color: var(--accent);
+    margin: 18px 0; min-height: 34px;
+    letter-spacing: -.3px;
+  }
+  .draw-prize.rolling { opacity: .6; }
+  .draw-prize.pop { animation: popIn .5s cubic-bezier(.2,.9,.3,1.5) both; }
+  @keyframes popIn {
+    0% { transform: scale(.85); opacity: 0; }
+    60% { transform: scale(1.05); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+  .draw-btn {
+    padding: 13px 40px; border-radius: 999px; font-size: 15px; font-weight: 700;
+    background: linear-gradient(135deg, #ff8a5b, #ff6b9d); color: #fff;
+    box-shadow: 0 6px 20px rgba(255,107,157,.35);
+    transition: all .2s;
+  }
+  .draw-btn:active { transform: scale(.96); }
+  .draw-btn:disabled { opacity: .55; }
+
+  /* 习惯详情 */
+  .hd-section { margin-top: 16px; }
+  .hd-section h4 { font-size: 13px; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+  .hd-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
+  }
+  .hd-cell {
+    aspect-ratio: 1; border-radius: 6px; background: #f0eef8;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: #b0aac8;
+  }
+  .hd-cell.done { background: linear-gradient(135deg, #22c55e, #4ade80); color: #fff; }
+  .hd-cell.miss { background: #ffe4e4; color: #d63333; }
+  .hd-cell.off { background: #f7f5ff; color: #d8d3e8; opacity: .55; }
+  .hd-stats { display: flex; gap: 10px; margin: 14px 0; }
+  .hd-stat {
+    flex: 1; background: #fbfaff; border: 1px solid var(--line);
+    border-radius: 11px; padding: 10px; text-align: center;
+  }
+  .hd-stat .v { font-size: 18px; font-weight: 800; color: var(--accent); }
+  .hd-stat .k { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+
+  /* 历史回看 */
+  .day-tasks .task { cursor: default; }
+  .day-habits .habit { cursor: default; }
+  .readonly-tip { font-size: 11px; color: var(--muted); text-align: center; padding: 6px 0 0; }
+
+  /* Toast */
+  .toast-layer {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    display: flex; flex-direction: column-reverse; gap: 8px; align-items: center;
+    z-index: 999; pointer-events: none;
+    max-width: calc(100vw - 24px);
+  }
+  .toast {
+    background: rgba(30,27,46,.95); color: #fff;
+    padding: 10px 20px; border-radius: 999px;
+    font-size: 13.5px; font-weight: 600;
+    box-shadow: 0 12px 30px rgba(0,0,0,.22);
+    opacity: 0; transform: translateY(14px) scale(.94);
+    transition: all .35s cubic-bezier(.2,.9,.3,1.25);
+    white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  }
+  .toast.show { opacity: 1; transform: none; }
+  .toast.good { background: linear-gradient(135deg, #22c55e, #15a34a); }
+  .toast.encourage { background: linear-gradient(135deg, #ff8a5b, #ff6b9d); }
+  .toast.carry { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="header-top">
+      <div>
+        <h1 id="greeting">你好</h1>
+        <p class="date-line" id="dateLine"></p>
+      </div>
+      <div class="stats">
+        <span id="statDone">0</span><span class="sep">/</span><span class="total" id="statTotal">0</span>
+      </div>
+    </div>
+    <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+    <p class="progress-text" id="progressText"></p>
+  </header>
+
+  <nav class="view-tabs">
+    <button class="tab active" data-view="today">今天</button>
+    <button class="tab" data-view="calendar">日历</button>
+  </nav>
+
+  <!-- 今天视图 -->
+  <section class="view" id="viewToday">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">📋 待办任务</span>
+        <span class="badge" id="taskBadge"></span>
+        <div class="panel-actions">
+          <button class="icon-btn" id="addTaskBtn" title="添加任务">＋</button>
+        </div>
+      </div>
+      <div class="panel-body" id="taskList"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">🔄 必备习惯</span>
+        <span class="badge" id="habitBadge"></span>
+        <div class="panel-actions">
+          <button class="icon-btn" id="addHabitBtn" title="添加习惯">＋</button>
+        </div>
+      </div>
+      <div class="panel-body" id="habitList"></div>
+    </div>
+  </section>
+
+  <!-- 日历视图 -->
+  <section class="view" id="viewCalendar" hidden>
+    <div class="panel">
+      <div style="padding: 6px 8px;">
+        <div class="calendar-header">
+          <button class="icon-btn" id="prevMonth">‹</button>
+          <span id="calMonthLabel"></span>
+          <button class="icon-btn" id="nextMonth">›</button>
+        </div>
+        <div class="calendar-weekdays">
+          <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+        <div class="cal-legend">
+          <div><span class="dot" style="background:#22c55e"></span> 任务全完成</div>
+          <div><span class="dot" style="background:#f59e0b"></span> 有未完成</div>
+          <div><span class="diamond" style="background:#22c55e"></span> 习惯全打卡</div>
+          <div><span class="diamond" style="background:#f59e0b"></span> 部分打卡</div>
+          <div><span class="diamond" style="background:#cbd5e1"></span> 未打卡</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="modalLayer"></div>
+<div class="toast-layer" id="toastLayer"></div>
+
+<script>
+/* ============================================================
+   常量
+   ============================================================ */
+const KEY = 'dyn_todo_v2';
+
+const PRIZES = [
+  '🍰 吃一块甜品', '🧋 喝一杯奶茶', '🎬 看一集剧',
+  '🛋️ 躺平 30 分钟', '🎮 打一局游戏', '💤 多睡半小时',
+  '🚶 出门散散步', '📚 看 10 页闲书', '🛍️ 买个小东西',
+  '🎁 免做家务一次', '🍜 点一次外卖', '🎧 听一张专辑'
+];
+
+const ENCOURAGE_MSGS = [
+  '哎呀辛苦了～', '我真去了呀怎么这么多…', '没事你可以的！',
+  '又加任务啦，你是真的拼 💪', '别慌，一条一条来～',
+  '任务 +1，你也很棒 +1 ✨', '嗯…加都加了，干吧！',
+  '辛苦了，加完这条先喝口水 🥤'
+];
+
+/* ============================================================
+   工具函数
+   ============================================================ */
+function todayStr(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return todayStr(d);
+}
+function prevDay(dateStr) { return addDays(dateStr, -1); }
+function shortDate(s) {
+  if (!s) return '';
+  const [, m, d] = s.split('-');
+  return `${+m}月${+d}日`;
+}
+function daysBetween(a, b) {
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function uid() { return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function isoWeekKey(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  const weekNum = 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+/* ============================================================
+   状态
+   ============================================================ */
+let state = {
+  tasks: [],                // 待办任务
+  habits: [],               // 必备习惯
+  days: {},                 // 按天记录（抽奖、鼓励里程碑）
+  awardedStreakDates: {},   // 已发过习惯连续7天奖的日期
+  history: {}               // 每日任务快照（供日历/历史回看）
+};
+
+let currentDay = '';
+
+/* ============================================================
+   持久化
+   ============================================================ */
+function loadState() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      state.tasks = Array.isArray(p.tasks) ? p.tasks : [];
+      state.habits = Array.isArray(p.habits) ? p.habits : [];
+      state.days = p.days && typeof p.days === 'object' ? p.days : {};
+      state.awardedStreakDates = p.awardedStreakDates && typeof p.awardedStreakDates === 'object'
+        ? p.awardedStreakDates : {};
+      state.history = p.history && typeof p.history === 'object' ? p.history : {};
+    }
+  } catch (e) { console.warn('读取失败', e); }
+}
+function saveState() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch (e) { console.warn('保存失败', e); }
+}
+
+function dayRecord(dateStr = todayStr()) {
+  if (!state.days[dateStr]) {
+    state.days[dateStr] = { celebrated: [], taskPrize: null };
+  }
+  return state.days[dateStr];
+}
+
+/* ============================================================
+   跨天：顺延 + 快照
+   ============================================================ */
+function rollOver() {
+  const today = todayStr();
+  const moved = [];
+
+  // 1. 把过去日期的任务快照到 history（顺延前）
+  const pastDates = new Set();
+  state.tasks.forEach(t => { if (t.date < today) pastDates.add(t.date); });
+
+  pastDates.forEach(d => {
+    if (!state.history[d]) {
+      const dayTasks = state.tasks.filter(t => t.date === d);
+      state.history[d] = {
+        tasks: dayTasks.map(t => ({ ...t })),
+        taskPrize: state.days[d]?.taskPrize || null
+      };
+    }
+  });
+
+  // 2. 未完成任务顺延到今天
+  state.tasks.forEach(t => {
+    if (!t.done && t.date < today) {
+      if (!t.originalDate) t.originalDate = t.date;
+      t.date = today;
+      t.carried = true;
+      moved.push(t);
+    }
+  });
+
+  if (moved.length || pastDates.size) saveState();
+  return moved;
+}
+
+/* ============================================================
+   习惯相关
+   ============================================================ */
+function isHabitDue(habit, dateStr) {
+  if (habit.createdAt > dateStr) return false;
+  if (habit.frequency === 'daily') return true;
+  // every_other
+  const diff = daysBetween(habit.anchorDate || habit.createdAt, dateStr);
+  return diff >= 0 && diff % 2 === 0;
+}
+function getDueHabits(dateStr) {
+  return state.habits.filter(h => isHabitDue(h, dateStr));
+}
+function allHabitsDoneOn(dateStr) {
+  const due = getDueHabits(dateStr);
+  if (!due.length) return null; // 无到期习惯 → 视为「无习惯日」
+  return due.every(h => h.records && h.records[dateStr]);
+}
+function habitDayStatus(dateStr) {
+  // 返回 'full' | 'partial' | 'none' | 'no-habit'
+  const due = getDueHabits(dateStr);
+  if (!due.length) return 'no-habit';
+  const doneCount = due.filter(h => h.records && h.records[dateStr]).length;
+  if (doneCount === due.length) return 'full';
+  if (doneCount === 0) return 'none';
+  return 'partial';
+}
+function calcHabitStreak() {
+  // 从今天往回数，连续「所有到期习惯完成」的天数
+  const today = todayStr();
+  // 习惯存在的最早日期
+  let earliest = today;
+  state.habits.forEach(h => {
+    const c = h.createdAt || today;
+    if (c < earliest) earliest = c;
+  });
+  if (!state.habits.length) return 0;
+
+  let streak = 0;
+  let d = today;
+  let safety = 400;
+  while (safety-- > 0) {
+    if (d < earliest) break;
+    const r = allHabitsDoneOn(d);
+    if (r === null) {
+      // 无到期习惯的日子，不中断也不计数
+      d = prevDay(d);
+      continue;
+    }
+    if (r === false) break;
+    streak++;
+    d = prevDay(d);
+  }
+  return streak;
+}
+
+/* ============================================================
+   任务相关
+   ============================================================ */
+function taskDayStatus(dateStr) {
+  // 返回 'full' | 'partial' | 'empty' | 'no-task'
+  let tasks;
+  if (dateStr < todayStr()) {
+    const h = state.history[dateStr];
+    tasks = h ? h.tasks : [];
+  } else {
+    tasks = state.tasks.filter(t => t.date === dateStr);
+  }
+  if (!tasks.length) return 'no-task';
+  const done = tasks.filter(t => t.done).length;
+  if (done === tasks.length) return 'full';
+  if (done === 0) return 'empty';
+  return 'partial';
+}
+
+function sortForDisplay(tasks) {
+  const today = todayStr();
+  const rank = t => {
+    if (t.done) return 100;
+    if (t.deadline && t.deadline <= today) return 0;
+    if (t.carried) return 1;
+    return 2;
+  };
+  return tasks.slice().sort((a, b) => {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    const da = a.deadline || '9999-99-99';
+    const db = b.deadline || '9999-99-99';
+    if (da !== db) return da < db ? -1 : 1;
+    return (a.createdAt || 0) - (b.createdAt || 0);
+  });
+}
+
+/* ============================================================
+   渲染
+   ============================================================ */
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 6) return '夜深了';
+  if (h < 11) return '早上好';
+  if (h < 14) return '中午好';
+  if (h < 18) return '下午好';
+  return '晚上好';
+}
+function dateLine() {
+  const d = new Date();
+  const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
+  return `${d.getMonth() + 1}月${d.getDate()}日 · ${wd}`;
+}
+
+function render() {
+  const today = todayStr();
+  const tasks = state.tasks.filter(t => t.date === today);
+  const total = tasks.length;
+  const done = tasks.filter(t => t.done).length;
+
+  document.getElementById('greeting').textContent = greeting();
+  document.getElementById('dateLine').textContent = dateLine();
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('statTotal').textContent = total;
+
+  const pct = total ? (done / total) * 100 : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+
+  const pt = document.getElementById('progressText');
+  if (!total) pt.textContent = '今天还没有任务，加一个开始吧 ✍️';
+  else if (done === total) pt.textContent = '🎉 全部完成！';
+  else pt.textContent = `已完成 ${done} / ${total}，还剩 ${total - done} 个`;
+
+  renderTasks(tasks);
+  renderHabits();
+  renderBadges(tasks);
+}
+
+function tagsHTML(t) {
+  const today = todayStr();
+  const parts = [];
+  if (t.deadline) {
+    const d = t.deadline;
+    let cls = 'tag-deadline', label;
+    if (d < today) { cls += ' overdue'; label = `⚠️ 已逾期 · ${shortDate(d)}`; }
+    else if (d === today) { cls += ' today'; label = `🔥 今天截止`; }
+    else {
+      const diff = daysBetween(today, d);
+      if (diff === 1) { cls += ' soon'; label = `⏰ 明天截止`; }
+      else { label = `📅 ${shortDate(d)} 截止`; }
+    }
+    parts.push(`<span class="tag ${cls}">${label}</span>`);
+  }
+  if (t.carried && !t.done) {
+    const from = t.originalDate ? shortDate(t.originalDate) : '之前';
+    parts.push(`<span class="tag tag-carry">↩︎ 从 ${from} 顺延</span>`);
+  }
+  return parts.join('');
+}
+
+function renderTasks(tasks) {
+  const el = document.getElementById('taskList');
+  const today = todayStr();
+  const sorted = sortForDisplay(tasks);
+
+  if (!sorted.length) {
+    el.innerHTML = '<div class="empty">今天还没有任务 ✍️</div>';
+    return;
+  }
+
+  el.innerHTML = sorted.map((t, i) => {
+    const urgent = !t.done && t.deadline && t.deadline <= today;
+    return `
+      <div class="task ${t.done ? 'done' : ''} ${urgent ? 'urgent' : ''}"
+           style="animation-delay:${Math.min(i * 40, 320)}ms" data-id="${t.id}">
+        <button class="check" data-act="toggle">${t.done ? '✓' : ''}</button>
+        <div class="task-body">
+          <div class="task-title">${esc(t.title)}</div>
+          ${t.note ? `<div class="task-note">${esc(t.note)}</div>` : ''}
+          <div class="tags">${tagsHTML(t)}</div>
+        </div>
+        <button class="del" data-act="del">×</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderHabits() {
+  const el = document.getElementById('habitList');
+  const today = todayStr();
+
+  if (!state.habits.length) {
+    el.innerHTML = '<div class="empty">还没有习惯，加一个开始养吧 🌱</div>';
+    return;
+  }
+
+  // 本周一到周日
+  const todayDate = new Date(today + 'T00:00:00');
+  const dow = (todayDate.getDay() + 6) % 7; // 0=周一
+  const monday = addDays(today, -dow);
+
+  el.innerHTML = state.habits.map((h, i) => {
+    const due = isHabitDue(h, today);
+    const done = !!(h.records && h.records[today]);
+    const streak = calcHabitStreakFor(h);
+    const longest = h.longestStreak || 0;
+
+    const weekCells = [];
+    for (let k = 0; k < 7; k++) {
+      const d = addDays(monday, k);
+      const isDue = isHabitDue(h, d);
+      const isDone = h.records && h.records[d];
+      const isToday = d === today;
+      let cls = 'habit-week-cell';
+      if (isDone) cls += ' done';
+      else if (!isDue) cls += ' off';
+      if (isToday) cls += ' today';
+      weekCells.push(`<div class="${cls}"><span class="dot"></span>${['一','二','三','四','五','六','日'][k]}</div>`);
+    }
+
+    let btn;
+    if (!due) {
+      btn = `<button class="check-btn off" disabled>今天不需要</button>`;
+    } else if (done) {
+      btn = `<button class="check-btn done" data-act="check" data-id="${h.id}">✓ 已打卡</button>`;
+    } else {
+      btn = `<button class="check-btn" data-act="check" data-id="${h.id}">今日打卡</button>`;
+    }
+
+    return `
+      <div class="habit ${done ? 'done' : ''}" style="animation-delay:${Math.min(i * 40, 320)}ms">
+        <div class="habit-head" data-act="detail" data-id="${h.id}">
+          <div class="habit-name">${esc(h.name)}</div>
+          <span class="habit-freq">${h.frequency === 'daily' ? '每天' : '隔一天'}</span>
+        </div>
+        <div class="habit-stats">
+          🔥 连续 <span class="streak">${streak}</span> 天 · 最长 ${longest} 天
+        </div>
+        <div class="habit-week">${weekCells.join('')}</div>
+        <div class="habit-actions">${btn}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function calcHabitStreakFor(habit) {
+  const today = todayStr();
+  let streak = 0;
+  let d = today;
+  let safety = 400;
+  while (safety-- > 0) {
+    if (d < habit.createdAt) break;
+    if (!isHabitDue(habit, d)) { d = prevDay(d); continue; }
+    if (habit.records && habit.records[d]) { streak++; d = prevDay(d); }
+    else break;
+  }
+  return streak;
+}
+
+function renderBadges(tasks) {
+  const today = todayStr();
+  const dr = dayRecord(today);
+
+  // 待办徽标
+  const taskBadge = document.getElementById('taskBadge');
+  if (!tasks.length) {
+    taskBadge.textContent = '';
+    taskBadge.className = 'badge';
+  } else if (tasks.every(t => t.done)) {
+    if (dr.taskPrize) {
+      taskBadge.textContent = '🎁 已抽到：' + dr.taskPrize;
+      taskBadge.className = 'badge rewarded';
+    } else {
+      taskBadge.textContent = '🎲 待抽奖';
+      taskBadge.className = 'badge active';
+    }
+  } else {
+    taskBadge.textContent = '🎲 完成全部可抽奖';
+    taskBadge.className = 'badge';
+  }
+
+  // 习惯徽标
+  const habitBadge = document.getElementById('habitBadge');
+  if (!state.habits.length) {
+    habitBadge.textContent = '';
+    habitBadge.className = 'badge';
+    return;
+  }
+  const streak = calcHabitStreak();
+  const justAwardedToday = dr.habitPrize;
+  if (justAwardedToday) {
+    habitBadge.textContent = '🎁 已抽到：' + justAwardedToday;
+    habitBadge.className = 'badge rewarded';
+  } else {
+    const cycleDay = streak % 7;
+    if (cycleDay === 0 && streak > 0 && state.awardedStreakDates[today]) {
+      habitBadge.textContent = '🎲 待抽奖';
+      habitBadge.className = 'badge active';
+    } else {
+      const show = streak % 7;
+      habitBadge.textContent = `🎲 连续 ${show}/7 天`;
+      habitBadge.className = 'badge';
+    }
+  }
+}
+
+/* ============================================================
+   日历
+   ============================================================ */
+let calYear, calMonth;
+
+function renderCalendar() {
+  const label = document.getElementById('calMonthLabel');
+  const grid = document.getElementById('calendarGrid');
+  label.textContent = `${calYear} 年 ${calMonth + 1} 月`;
+
+  const first = new Date(calYear, calMonth, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push('<div class="cal-cell empty"></div>');
+
+  const today = todayStr();
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const marks = [];
+
+    const ts = taskDayStatus(ds);
+    if (ts === 'full') marks.push('<span class="cal-mark dot-full"></span>');
+    else if (ts === 'partial' || ts === 'empty') marks.push('<span class="cal-mark dot-partial"></span>');
+
+    const hs = habitDayStatus(ds);
+    if (hs === 'full') marks.push('<span class="cal-mark diamond-full"></span>');
+    else if (hs === 'partial') marks.push('<span class="cal-mark diamond-partial"></span>');
+    else if (hs === 'none') marks.push('<span class="cal-mark diamond-none"></span>');
+
+    const cls = 'cal-cell' + (ds === today ? ' today' : '');
+    cells.push(`
+      <div class="${cls}" data-date="${ds}">
+        <span class="num">${d}</span>
+        <span class="cal-marks">${marks.join('')}</span>
+      </div>
+    `);
+  }
+
+  grid.innerHTML = cells.join('');
+}
+
+/* ============================================================
+   弹层
+   ============================================================ */
+function openModal(html) {
+  const layer = document.getElementById('modalLayer');
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `<div class="modal">${html}</div>`;
+  layer.appendChild(backdrop);
+
+  backdrop.addEventListener('click', e => {
+    if (e.target === backdrop || e.target.closest('.close-x')) closeModal(backdrop);
+  });
+
+  return backdrop;
+}
+function closeModal(backdrop) {
+  backdrop.style.animation = 'fadeIn .18s ease reverse';
+  setTimeout(() => backdrop.remove(), 160);
+}
+function closeTopModal() {
+  const layer = document.getElementById('modalLayer');
+  const last = layer.lastElementChild;
+  if (last) closeModal(last);
+}
+
+/* ============================================================
+   添加任务 / 习惯
+   ============================================================ */
+function openAddTaskModal() {
+  const m = openModal(`
+    <h3>📋 添加任务 <button class="close-x">×</button></h3>
+    <label>任务标题</label>
+    <input type="text" id="newTaskTitle" maxlength="120" placeholder="今天要做什么？">
+    <label>备注（可选）</label>
+    <input type="text" id="newTaskNote" maxlength="200" placeholder="补充说明">
+    <label>截止日期（可选）</label>
+    <input type="date" id="newTaskDeadline">
+    <div class="modal-btns">
+      <button class="btn-secondary close-x">取消</button>
+      <button class="btn-primary" id="confirmAddTask">添加</button>
+    </div>
+  `);
+
+  setTimeout(() => m.querySelector('#newTaskTitle').focus(), 120);
+
+  m.querySelector('#confirmAddTask').addEventListener('click', () => {
+    const title = m.querySelector('#newTaskTitle').value.trim();
+    const note = m.querySelector('#newTaskNote').value.trim();
+    const deadline = m.querySelector('#newTaskDeadline').value || null;
+    if (!title) { m.querySelector('#newTaskTitle').focus(); return; }
+    addTask(title, note, deadline);
+    closeModal(m);
+  });
+
+  m.querySelector('#newTaskTitle').addEventListener('keydown', e => {
+    if (e.key === 'Enter') m.querySelector('#confirmAddTask').click();
+  });
+}
+
+function openAddHabitModal() {
+  const m = openModal(`
+    <h3>🔄 添加习惯 <button class="close-x">×</button></h3>
+    <label>习惯名称</label>
+    <input type="text" id="newHabitName" maxlength="60" placeholder="比如：背 40 个单词">
+    <label>频率</label>
+    <select id="newHabitFreq">
+      <option value="daily">每天</option>
+      <option value="every_other">隔一天</option>
+    </select>
+    <div class="modal-btns">
+      <button class="btn-secondary close-x">取消</button>
+      <button class="btn-primary" id="confirmAddHabit">添加</button>
+    </div>
+  `);
+
+  setTimeout(() => m.querySelector('#newHabitName').focus(), 120);
+
+  m.querySelector('#confirmAddHabit').addEventListener('click', () => {
+    const name = m.querySelector('#newHabitName').value.trim();
+    const freq = m.querySelector('#newHabitFreq').value;
+    if (!name) { m.querySelector('#newHabitName').focus(); return; }
+    addHabit(name, freq);
+    closeModal(m);
+  });
+
+  m.querySelector('#newHabitName').addEventListener('keydown', e => {
+    if (e.key === 'Enter') m.querySelector('#confirmAddHabit').click();
+  });
+}
+
+/* ============================================================
+   业务：任务
+   ============================================================ */
+function addTask(title, note, deadline) {
+  const today = todayStr();
+  const existingToday = state.tasks.filter(t => t.date === today).length;
+
+  state.tasks.push({
+    id: uid(),
+    title, note: note || '',
+    deadline: deadline || null,
+    date: today,
+    originalDate: today,
+    createdAt: Date.now(),
+    done: false,
+    doneAt: null,
+    carried: false
+  });
+
+  if (existingToday >= 1) {
+    toast(pick(ENCOURAGE_MSGS), 'encourage');
+  }
+
+  saveState();
+  render();
+}
+
+function toggleTask(id) {
+  const t = state.tasks.find(x => x.id === id);
+  if (!t) return;
+  t.done = !t.done;
+  t.doneAt = t.done ? Date.now() : null;
+  saveState();
+  render();
+
+  if (t.done) {
+    setTimeout(() => {
+      checkTaskCelebration();
+      checkTaskDraw(todayStr());
+    }, 220);
+  }
+}
+
+function deleteTask(id) {
+  state.tasks = state.tasks.filter(x => x.id !== id);
+  saveState();
+  render();
+}
+
+function checkTaskCelebration() {
+  const today = todayStr();
+  const tasks = state.tasks.filter(t => t.date === today);
+  const total = tasks.length;
+  if (!total) return;
+  const done = tasks.filter(t => t.done).length;
+  const dr = dayRecord(today);
+
+  const thresholds = [...new Set([
+    Math.ceil(total / 3),
+    Math.ceil((total * 2) / 3),
+    total
+  ])].filter(n => n > 0).sort((a, b) => a - b);
+
+  let changed = false;
+  thresholds.forEach(th => {
+    if (done >= th && !dr.celebrated.includes(th)) {
+      dr.celebrated.push(th);
+      changed = true;
+      let msg;
+      if (th === total) msg = '🎉 全部完成！你真的太厉害了！';
+      else if (th / total <= 0.4) msg = '✨ 好棒！已经完成三分之一啦';
+      else msg = '💪 过半啦，继续保持！';
+      setTimeout(() => toast(msg, 'good'), 0);
+    }
+  });
+  if (changed) saveState();
+}
+
+function checkTaskDraw(dateStr) {
+  const tasks = state.tasks.filter(t => t.date === dateStr);
+  if (!tasks.length) return;
+  if (!tasks.every(t => t.done)) return;
+  const dr = dayRecord(dateStr);
+  if (dr.taskPrize) return;
+  openDrawModal('task', dateStr);
+}
+
+/* ============================================================
+   业务：习惯
+   ============================================================ */
+function addHabit(name, freq) {
+  const today = todayStr();
+  state.habits.push({
+    id: uid(),
+    name,
+    frequency: freq,
+    anchorDate: today,
+    createdAt: today,
+    records: {},
+    longestStreak: 0,
+    weeklyChanges: {}
+  });
+  saveState();
+  render();
+  toast('新习惯已创建 🌱 加油！', 'good');
+}
+
+function checkInHabit(id) {
+  const h = state.habits.find(x => x.id === id);
+  if (!h) return;
+  const today = todayStr();
+  if (!isHabitDue(h, today)) return;
+  if (!h.records) h.records = {};
+
+  const wasDone = h.records[today];
+  if (wasDone) {
+    delete h.records[today];
+  } else {
+    h.records[today] = true;
+    toast('打卡成功！✨', 'good');
+  }
+
+  // 更新最长记录
+  const cur = calcHabitStreakFor(h);
+  if (cur > (h.longestStreak || 0)) h.longestStreak = cur;
+
+  saveState();
+  render();
+
+  if (!wasDone) {
+    setTimeout(() => checkHabitDraw(), 260);
+  }
+}
+
+function deleteHabit(id) {
+  state.habits = state.habits.filter(x => x.id !== id);
+  saveState();
+  render();
+}
+
+function checkHabitDraw() {
+  const today = todayStr();
+  const streak = calcHabitStreak();
+  if (streak <= 0) return;
+  if (streak % 7 !== 0) return;
+  if (state.awardedStreakDates[today]) return;
+
+  // 标记为已触发，避免重复弹
+  state.awardedStreakDates[today] = true;
+  saveState();
+
+  const dr = dayRecord(today);
+  if (dr.habitPrize) return;
+  openDrawModal('habit', today);
+}
+
+/* ============================================================
+   抽奖
+   ============================================================ */
+let drawQueue = [];
+
+function openDrawModal(source, dateStr) {
+  if (source === 'habit') {
+    const dr = dayRecord(dateStr);
+    if (dr.habitPrize) return;
+  }
+  if (source === 'task') {
+    const dr = dayRecord(dateStr);
+    if (dr.taskPrize) return;
+  }
+
+  const title = source === 'task' ? '🎉 今日待办全部完成！' : '🎉 连续 7 天习惯全部打卡！';
+  const sub = source === 'task' ? '辛苦啦，来抽个奖犒劳一下自己' : '你太棒了，坚持就是胜利';
+
+  const m = openModal(`
+    <div class="draw-box">
+      <div class="draw-title">${title}</div>
+      <div class="draw-sub">${sub}</div>
+      <div class="draw-prize" id="drawPrize">🎁</div>
+      <button class="draw-btn" id="doDrawBtn">🎲 抽 一 次</button>
+    </div>
+  `);
+
+  m.querySelector('#doDrawBtn').addEventListener('click', () => {
+    runDraw(m, source, dateStr);
+  });
+}
+
+function runDraw(modal, source, dateStr) {
+  const btn = modal.querySelector('#doDrawBtn');
+  const prizeEl = modal.querySelector('#drawPrize');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  prizeEl.classList.add('rolling');
+
+  let ticks = 0;
+  const TOTAL = 22;
+  const timer = setInterval(() => {
+    prizeEl.textContent = pick(PRIZES);
+    ticks++;
+    if (ticks >= TOTAL) {
+      clearInterval(timer);
+      const prize = pick(PRIZES);
+
+      const dr = dayRecord(dateStr);
+      if (source === 'task') dr.taskPrize = prize;
+      else dr.habitPrize = prize;
+      saveState();
+
+      prizeEl.classList.remove('rolling');
+      prizeEl.classList.add('pop');
+      prizeEl.textContent = prize;
+
+      btn.textContent = '关闭';
+      btn.disabled = false;
+      btn.onclick = () => {
+        closeModal(modal);
+        render();
+        // 若队列里有下一个抽奖
+        if (drawQueue.length) {
+          const next = drawQueue.shift();
+          setTimeout(() => openDrawModal(next.source, next.dateStr), 300);
+        }
+      };
+
+      toast('🎉 恭喜抽中：' + prize, 'good');
+    }
+  }, 75);
+}
+
+/* ============================================================
+   习惯详情
+   ============================================================ */
+function openHabitDetail(id) {
+  const h = state.habits.find(x => x.id === id);
+  if (!h) return;
+
+  const today = todayStr();
+  const streak = calcHabitStreakFor(h);
+  const longest = h.longestStreak || 0;
+
+  // 最近 35 天格子（5 周）
+  const cells = [];
+  for (let i = 34; i >= 0; i--) {
+    const d = addDays(today, -i);
+    const isDue = isHabitDue(h, d);
+    const isDone = h.records && h.records[d];
+    let cls = 'hd-cell';
+    if (!isDue) cls += ' off';
+    else if (isDone) cls += ' done';
+    else if (d < today) cls += ' miss';
+    const day = +d.split('-')[2];
+    cells.push(`<div class="${cls}">${day}</div>`);
+  }
+
+  // 本月完成率
+  const firstOfMonth = today.slice(0, 7) + '-01';
+  let dueCount = 0, doneCount = 0;
+  let d = firstOfMonth;
+  while (d <= today) {
+    if (isHabitDue(h, d)) {
+      dueCount++;
+      if (h.records && h.records[d]) doneCount++;
+    }
+    d = addDays(d, 1);
+  }
+  const rate = dueCount ? Math.round((doneCount / dueCount) * 100) : 0;
+
+  // 每周修改次数
+  const wk = isoWeekKey(today);
+  const changesUsed = (h.weeklyChanges && h.weeklyChanges[wk]) || 0;
+  const changesLeft = Math.max(0, 3 - changesUsed);
+
+  const m = openModal(`
+    <h3>🔄 ${esc(h.name)} <button class="close-x">×</button></h3>
+
+    <div class="hd-stats">
+      <div class="hd-stat"><div class="v">${streak}</div><div class="k">当前连续</div></div>
+      <div class="hd-stat"><div class="v">${longest}</div><div class="k">最长记录</div></div>
+      <div class="hd-stat"><div class="v">${rate}%</div><div class="k">本月完成率</div></div>
+    </div>
+
+    <div class="hd-section">
+      <h4>最近 35 天</h4>
+      <div class="hd-grid">${cells.join('')}</div>
+    </div>
+
+    <div class="hd-section">
+      <h4>频率</h4>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span class="habit-freq" style="font-size:12px;padding:5px 12px;">
+          ${h.frequency === 'daily' ? '每天' : '隔一天'}
+        </span>
+        <button class="btn-secondary" id="changeFreqBtn"
+                style="flex:0 0 auto;padding:8px 14px;font-size:12.5px;"
+                ${changesLeft === 0 ? 'disabled' : ''}>
+          本周还可改 ${changesLeft} 次
+        </button>
+      </div>
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn-secondary" id="deleteHabitBtn" style="background:#ffe4e4;color:#d63333;">删除习惯</button>
+      <button class="btn-primary close-x">关闭</button>
+    </div>
+  `);
+
+  m.querySelector('#changeFreqBtn').addEventListener('click', () => {
+    if (changesLeft === 0) return;
+    const newFreq = h.frequency === 'daily' ? 'every_other' : 'daily';
+    if (!h.weeklyChanges) h.weeklyChanges = {};
+    h.weeklyChanges[wk] = changesUsed + 1;
+    h.frequency = newFreq;
+    h.anchorDate = today;
+    saveState();
+    closeModal(m);
+    render();
+    toast('频率已更新 ✅', 'good');
+  });
+
+  m.querySelector('#deleteHabitBtn').addEventListener('click', () => {
+    if (!confirm('确定删除这个习惯吗？')) return;
+    closeModal(m);
+    deleteHabit(h.id);
+  });
+}
+
+/* ============================================================
+   历史回看
+   ============================================================ */
+function openDayDetail(dateStr) {
+  const today = todayStr();
+  const isToday = dateStr === today;
+  const isFuture = dateStr > today;
+
+  // 任务数据
+  let tasks;
+  let taskPrize;
+  if (isToday || isFuture) {
+    tasks = state.tasks.filter(t => t.date === dateStr);
+    taskPrize = state.days[dateStr]?.taskPrize || null;
+  } else {
+    const h = state.history[dateStr];
+    tasks = h ? h.tasks : [];
+    taskPrize = h ? h.taskPrize : (state.days[dateStr]?.taskPrize || null);
+  }
+
+  // 当天到期的习惯
+  const dueHabits = getDueHabits(dateStr);
+
+  // 任务展示
+  let taskHTML = '';
+  if (!tasks.length) {
+    taskHTML = '<div class="empty">这天没有任务</div>';
+  } else {
+    const sorted = sortForDisplay(tasks);
+    taskHTML = sorted.map(t => {
+      const urgent = !t.done && t.deadline && t.deadline <= dateStr;
+      return `
+        <div class="task ${t.done ? 'done' : ''} ${urgent ? 'urgent' : ''}" style="cursor:default;">
+          <div class="check">${t.done ? '✓' : ''}</div>
+          <div class="task-body">
+            <div class="task-title">${esc(t.title)}</div>
+            ${t.note ? `<div class="task-note">${esc(t.note)}</div>` : ''}
+            <div class="tags">${tagsHTMLForDate(t, dateStr)}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 习惯展示（只读，已完成划掉灰色，未完成高亮）
+  let habitHTML = '';
+  if (!dueHabits.length) {
+    habitHTML = '<div class="empty">这天没有到期的习惯</div>';
+  } else {
+    habitHTML = dueHabits.map(h => {
+      const done = !!(h.records && h.records[dateStr]);
+      return `
+        <div class="habit ${done ? 'done' : ''}" style="cursor:default;${done ? '' : 'background:#fff9ec;border-color:#ffe0a3;'}">
+          <div class="habit-head">
+            <div class="habit-name" style="${done ? 'text-decoration:line-through;' : ''}">${esc(h.name)}</div>
+            <span class="habit-freq">${h.frequency === 'daily' ? '每天' : '隔一天'}</span>
+          </div>
+          <div class="habit-stats">
+            ${done ? '✅ 已完成' : '⏳ 未完成'}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 奖励
+  const rewardHTML = `
+    <div style="font-size:12.5px;color:#8b87a3;line-height:1.9;">
+      <div>待办抽奖：${taskPrize ? '🎁 已抽到 · ' + esc(taskPrize) : (tasks.length && tasks.every(t => t.done) ? '🎲 待抽奖' : '—')}</div>
+    </div>
+  `;
+
+  const dayLabel = `${dateStr.split('-')[0]} 年 ${+dateStr.split('-')[1]} 月 ${+dateStr.split('-')[2]} 日`;
+
+  openModal(`
+    <h3>📅 ${dayLabel} <button class="close-x">×</button></h3>
+
+    <div class="hd-section">
+      <h4>📋 当天任务 ${isToday ? '（今天）' : ''}</h4>
+      <div class="day-tasks">${taskHTML}</div>
+    </div>
+
+    <div class="hd-section">
+      <h4>🔄 当天习惯</h4>
+      <div class="day-habits">${habitHTML}</div>
+    </div>
+
+    <div class="hd-section">
+      <h4>🎁 当天奖励</h4>
+      ${rewardHTML}
+    </div>
+
+  `);
+}
+
+function tagsHTMLForDate(t, dateStr) {
+  const parts = [];
+  if (t.deadline) {
+    const d = t.deadline;
+    let cls = 'tag-deadline', label;
+    if (d < dateStr) { cls += ' overdue'; label = `⚠️ 已逾期 · ${shortDate(d)}`; }
+    else if (d === dateStr) { cls += ' today'; label = `🔥 当天截止`; }
+    else { label = `📅 ${shortDate(d)} 截止`; }
+    parts.push(`<span class="tag ${cls}">${label}</span>`);
+  }
+  if (t.carried && !t.done) {
+    const from = t.originalDate ? shortDate(t.originalDate) : '之前';
+    parts.push(`<span class="tag tag-carry">↩︎ 从 ${from} 顺延</span>`);
+  }
+  return parts.join('');
+}
+
+/* ============================================================
+   Toast
+   ============================================================ */
+function toast(msg, type = '') {
+  const layer = document.getElementById('toastLayer');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  layer.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 400);
+  }, 3000);
+}
+
+/* ============================================================
+   事件绑定
+   ============================================================ */
+function bindEvents() {
+  // 视图切换
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const v = tab.dataset.view;
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+      document.getElementById('viewToday').hidden = v !== 'today';
+      document.getElementById('viewCalendar').hidden = v !== 'calendar';
+      if (v === 'calendar') {
+        const now = new Date();
+        if (calYear === undefined) { calYear = now.getFullYear(); calMonth = now.getMonth(); }
+        renderCalendar();
+      }
+    });
+  });
+
+  // 添加按钮
+  document.getElementById('addTaskBtn').addEventListener('click', openAddTaskModal);
+  document.getElementById('addHabitBtn').addEventListener('click', openAddHabitModal);
+
+  // 待办列表事件委托
+  document.getElementById('taskList').addEventListener('click', e => {
+    const taskEl = e.target.closest('.task');
+    if (!taskEl) return;
+    const id = taskEl.dataset.id;
+    if (e.target.closest('[data-act="toggle"]')) toggleTask(id);
+    else if (e.target.closest('[data-act="del"]')) deleteTask(id);
+  });
+
+  // 习惯列表事件委托
+  document.getElementById('habitList').addEventListener('click', e => {
+    const id = e.target.closest('[data-id]')?.dataset.id;
+    if (!id) return;
+    if (e.target.closest('[data-act="check"]')) checkInHabit(id);
+    else if (e.target.closest('[data-act="detail"]') ||
+             e.target.closest('.habit-head')) {
+      openHabitDetail(id);
+    }
+  });
+
+  // 日历月份切换
+  document.getElementById('prevMonth').addEventListener('click', () => {
+    calMonth--;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    renderCalendar();
+  });
+  document.getElementById('nextMonth').addEventListener('click', () => {
+    calMonth++;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderCalendar();
+  });
+
+  // 日历点击日期
+  document.getElementById('calendarGrid').addEventListener('click', e => {
+    const cell = e.target.closest('.cal-cell');
+    if (!cell || cell.classList.contains('empty')) return;
+    const ds = cell.dataset.date;
+    if (!ds) return;
+    openDayDetail(ds);
+  });
+}
+
+/* ============================================================
+   跨天监听
+   ============================================================ */
+function checkDayChange() {
+  const t = todayStr();
+  if (t !== currentDay) {
+    currentDay = t;
+    const moved = rollOver();
+    render();
+    if (moved.length) {
+      setTimeout(() => toast(`↩︎ ${moved.length} 个未完成任务已顺延到今天`, 'carry'), 400);
+    }
+  }
+}
+
+/* ============================================================
+   启动
+   ============================================================ */
+function init() {
+  loadState();
+  // 清理 90 天前的历史
+  const cut = todayStr(new Date(Date.now() - 90 * 86400000));
+  Object.keys(state.history).forEach(k => { if (k < cut) delete state.history[k]; });
+  Object.keys(state.days).forEach(k => { if (k < cut) delete state.days[k]; });
+
+  currentDay = todayStr();
+  const moved = rollOver();
+  render();
+  bindEvents();
+
+  if (moved.length) {
+    setTimeout(() => toast(`↩︎ ${moved.length} 个未完成任务已顺延到今天`, 'carry'), 600);
+  }
+
+  setInterval(checkDayChange, 30000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkDayChange();
+  });
+}
+
+init();
+</script>
+</body>
+</html>
